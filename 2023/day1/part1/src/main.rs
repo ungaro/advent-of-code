@@ -8,7 +8,7 @@ fn main() -> io::Result<()> {
     let current_dir = env::current_dir()?;
     println!("Current directory: {:?}", current_dir);
 
-    let path = Path::new("input.txt");
+    let path = Path::new("../../data/input.txt");
 
     // Check if the file exists
     if !path.exists() {
