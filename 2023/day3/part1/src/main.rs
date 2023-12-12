@@ -1,32 +1,52 @@
+use regex::Regex;
+use std::collections::HashMap;
 use std::env;
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-use regex::Regex;
-use std::fmt;
 
-
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct NumberPosition {
     number: i32,
     start: usize,
     end: usize,
+    row: usize,
 }
 
 impl fmt::Display for NumberPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{number: {}, start: {}, end: {}}}", self.number, self.start, self.end)
+        write!(
+            f,
+            "{{number: {}, start: {}, end: {}, row: {}}}",
+            self.number, self.start, self.end, self.row
+        )
     }
 }
 
+#[derive(Debug)]
+struct SymbolPosition<'a> {
+    symbol: &'a str,
+    start: usize,
+    end: usize,
+    row: usize,
+}
+
+impl fmt::Display for SymbolPosition<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{{symbol: '{}', start: {}, end: {}, row: {}}}",
+            self.symbol, self.start, self.end, self.row
+        )
+    }
+}
 
 fn main() -> io::Result<()> {
-
     let current_dir = env::current_dir()?;
     println!("Current directory: {:?}", current_dir);
 
-    let path = Path::new("../input2.txt");
+    let path = Path::new("../input.txt");
 
     // Check if the file exists
     if !path.exists() {
@@ -48,8 +68,7 @@ fn main() -> io::Result<()> {
 
     let sum = sum_part_numbers(&lines_str);
     println!("Sum of part numbers: {}", sum);
-    Ok(()) 
-
+    Ok(())
 }
 
 fn sum_part_numbers(schematic: &[&str]) -> i32 {
@@ -57,40 +76,74 @@ fn sum_part_numbers(schematic: &[&str]) -> i32 {
     let rows = schematic.len();
     let cols = schematic[0].len(); // assuming all rows are of equal length
 
-    println!("rows:cols {:?} : {:?}", rows,cols);
+    println!("rows:cols {:?} : {:?}", rows, cols);
 
-
-
-    let re = Regex::new(r"\d+").unwrap();
-    let numbers = re.find_iter(schematic[0])
-                    .map(|mat| NumberPosition {
-                        number: mat.as_str().parse::<i32>().unwrap(),
-                        start: mat.start(),
-                        end: mat.end() - 1, // Adjust to make end position inclusive
-                    })
-                    .collect::<Vec<_>>();
+    // match any characters that are not 0-9 and .
+    let re = Regex::new(r"[^\d\.]").unwrap();
+    let symbols = re
+        .find_iter(schematic[1])
+        .map(|mat| SymbolPosition {
+            symbol: mat.as_str(),
+            start: mat.start(),
+            end: mat.end() - 1, // Adjust to make end position inclusive
+            row: 1,
+        })
+        .collect::<Vec<_>>();
 
     // Print results
-    for num in numbers {
-        println!("{}", num);
+    for symbol in symbols {
+        println!("{} ", symbol);
     }
 
-
-
-
+    let mut symbol_positions = HashMap::new();
+    let re = Regex::new(r"[^\d\.]").unwrap();
+    let mut positions = Vec::new();
+    for mat in re.find_iter(schematic[0]) {
+        positions.push(mat.start());
+    }
+    if !positions.is_empty() {
+        symbol_positions.insert(0, positions);
+    }
+    //println!("symbol_positions {:?} ", symbol_positions);
+    //println!("schematic_len {:?} ", schematic.len());
 
     for (i, row) in schematic.iter().enumerate() {
-        println!("i row {:?} {:?}",i,row);
+        println!("i row {:?} {:?}", i, row);
+        let mut positions = Vec::new();
+        //println!("symbol_LEN {:?} ", i + 1);
+        if (schematic.len() > i + 1) {
+            //  println!("symbol_LEN {:?} ", i + 1);
 
-        for (j, &ch) in row.as_bytes().iter().enumerate() {
-            //println!("ch {:?}",ch);
+            for mat in re.find_iter(schematic[i + 1]) {
+                positions.push(mat.start());
+            }
+            if !positions.is_empty() {
+                symbol_positions.insert(i + 1, positions);
+            }
+        }
+        //println!("symbol_positions {:?} ", symbol_positions);
 
-            if ch.is_ascii_digit() {
-                // Check adjacent characters for symbols
-                if is_adjacent_to_symbol(schematic, i, j, rows, cols) {
-                    // If it's a number and adjacent to a symbol, add to sum
-                    sum += ch as i32 - '0' as i32;
-                }
+        // match any characters that are  0-9 and infinitely in between (means numbers like 2834 21 or 2837459823)
+        let re = Regex::new(r"\d+").unwrap();
+        let numbers = re
+            .find_iter(row)
+            .map(|mat| NumberPosition {
+                number: mat.as_str().parse::<i32>().unwrap(),
+                start: mat.start(),
+                end: mat.end() - 1, // Adjust to make end position inclusive
+                row: i,
+            })
+            .collect::<Vec<_>>();
+
+        // Print results
+        for num in numbers {
+            //println!("Numbers: {}", num);
+            if is_adjacent_to_symbol(num.clone(), symbol_positions.clone()) {
+                //eprintln!("true");
+                println!("NUMBER {:?}", num.number);
+
+                // If it's a number and adjacent to a symbol, add to sum
+                sum += num.number as i32;
             }
         }
     }
@@ -98,23 +151,85 @@ fn sum_part_numbers(schematic: &[&str]) -> i32 {
     sum
 }
 
-fn is_adjacent_to_symbol(schematic: &[&str], i: usize, j: usize, rows: usize, cols: usize) -> bool {
-    let dx = [-1, 0, 1, -1, 1, -1, 0, 1];
-    let dy = [-1, -1, -1, 0, 0, 1, 1, 1];
-    //println!("schematic,i,j,rows,cols {:?} : {:?}: {:?}: {:?}: {:?}",schematic,i,j,rows,cols);
-    //eprintln!("====================================================================================");
+fn is_adjacent_to_symbol(
+    num: NumberPosition,
+    symbol_positions: HashMap<usize, Vec<usize>>,
+) -> bool {
+    /*
+        println!(
+            "numnum {:?} {:?} {:?} {:?} ",
+            num.number, num.start, num.end, num.row
+        );
+    */
 
-    for k in 0..8 {
-        let new_i = i as i32 + dx[k];
-        let new_j = j as i32 + dy[k];
+    if (num.row > 0) {
+        match symbol_positions.get(&(num.row - 1)) {
+            Some(value) => {
+                let is_within_range = value.iter().any(|&number| {
+                    let start = if num.start > 0 {
+                        num.start - 1
+                    } else {
+                        num.start
+                    };
 
-        if new_i >= 0 && new_i < rows as i32 && new_j >= 0 && new_j < cols as i32 {
-            let adjacent_char = schematic[new_i as usize].as_bytes()[new_j as usize] as char;
-            if adjacent_char != '.' && !adjacent_char.is_ascii_digit() {
-                return true;
+                    number >= start && number <= num.end + 1
+                });
+                if is_within_range {
+                    //println!("At least one number is in the range.");
+                    return true;
+                }
+
+                // println!("Value for key '{:?}': {:?}", num.row-1, value)
             }
+            None => (),
         }
     }
+    match symbol_positions.get(&num.row) {
+        Some(value) => {
+            let is_within_range = value.iter().any(|&number| {
+                let start = if num.start > 0 {
+                    num.start - 1
+                } else {
+                    num.start
+                };
+
+                number >= start && number <= num.end + 1
+            });
+            if is_within_range {
+                //println!("At least one number is in the range.");
+                return true;
+            }
+
+            //    println!("Value for key '{:?}': {:?}", num.row, value)
+        }
+        None => (),
+    }
+
+    match symbol_positions.get(&(num.row + 1)) {
+        Some(value) => {
+            let is_within_range = value.iter().any(|&number| {
+                let start = if num.start > 0 {
+                    num.start - 1
+                } else {
+                    num.start
+                };
+
+                number >= start && number <= num.end + 1
+            });
+            if is_within_range {
+                //println!("At least one number is in the range.");
+                return true;
+            }
+
+            // println!("Value for key '{:?}': {:?}", num.row+1, value)
+        }
+        None => (),
+    }
+  
+    eprintln!(
+        "===================================================================================="
+    );
+
 
     false
 }
