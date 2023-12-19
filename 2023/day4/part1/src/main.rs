@@ -1,13 +1,10 @@
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
 fn main() -> io::Result<()> {
-    // Print the current working directory
-    let current_dir = env::current_dir()?;
-    println!("Current directory: {:?}", current_dir);
-
     let path = Path::new("../input.txt");
 
     // Check if the file exists
@@ -33,18 +30,30 @@ fn main() -> io::Result<()> {
 
 fn calculate_card_points(card: &str) -> i32 {
     let parts: Vec<&str> = card.split('|').collect();
-    let winning_numbers: Vec<i32> = parts[0].split_whitespace().filter_map(|num| num.parse().ok()).collect();
-    let my_numbers: Vec<i32> = parts[1].split_whitespace().filter_map(|num| num.parse().ok()).collect();
+    let winning_numbers: Vec<i32> = parts[0]
+        .split_whitespace()
+        .filter_map(|num| num.parse().ok())
+        .collect();
+    let my_numbers: Vec<i32> = parts[1]
+        .split_whitespace()
+        .filter_map(|num| num.parse().ok())
+        .collect();
 
-    let mut points = 0;
-    let mut multiplier = 1;
+    let my_numbers_hash: HashSet<_> = my_numbers.into_iter().collect();
 
-    for num in my_numbers {
-        if winning_numbers.contains(&num) {
-            points += multiplier;
-            multiplier *= 2;
-        }
+    let count = winning_numbers
+        .iter()
+        .filter(|&item| my_numbers_hash.contains(item))
+        .count();
+
+    let number: i32 = 2; 
+    let mut square = 0;
+    if count > 0 {
+        let exponent = (count - 1) as u32; // Convert to u32 for pow
+        square = number.pow(exponent); // Raise to the power
     }
 
-    points
+    println!("2 square count-1  {:?}", square);
+
+    square
 }
